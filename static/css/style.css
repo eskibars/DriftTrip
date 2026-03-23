@@ -1,0 +1,430 @@
+/* Reset & base */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+    --bg-dark: #1a1a2e;
+    --bg-panel: #16213e;
+    --bg-card: #0f3460;
+    --accent: #e94560;
+    --accent-glow: #ff6b81;
+    --text: #eee;
+    --text-dim: #8899aa;
+    --border: #2a3a5a;
+    --success: #2ed573;
+    --warning: #ffa502;
+}
+
+html, body {
+    height: 100%;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg-dark);
+    color: var(--text);
+    overflow: hidden;
+}
+
+/* Header / setup bar */
+#setup-bar {
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    z-index: 10;
+}
+
+.setup-form {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.input-group label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+}
+
+.input-group input,
+.input-group select {
+    background: var(--bg-dark);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    min-width: 200px;
+}
+
+.input-group select {
+    min-width: 80px;
+}
+
+.input-group input:focus,
+.input-group select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(233, 69, 96, 0.2);
+}
+
+#start-btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 8px 24px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    white-space: nowrap;
+}
+
+#start-btn:hover { background: var(--accent-glow); }
+#start-btn:active { transform: scale(0.97); }
+#start-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Main layout */
+#main-content {
+    display: flex;
+    height: calc(100vh - 60px);
+}
+
+#map-container {
+    flex: 1;
+    position: relative;
+}
+
+#map {
+    width: 100%;
+    height: 100%;
+}
+
+/* Side panel */
+#side-panel {
+    width: 380px;
+    background: var(--bg-panel);
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.panel-section {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+.panel-section h2 {
+    font-size: 18px;
+    margin-bottom: 4px;
+}
+
+.panel-section h3 {
+    font-size: 14px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+}
+
+/* Progress bar */
+#progress-container {
+    margin-top: 12px;
+}
+
+#progress-bar {
+    height: 6px;
+    background: var(--bg-dark);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+#progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-glow));
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+#progress-info {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+/* City arrival */
+#city-banner {
+    text-align: center;
+    padding: 12px;
+    background: linear-gradient(135deg, var(--bg-card), var(--bg-dark));
+    border-radius: 8px;
+    border: 1px solid var(--accent);
+    animation: pulse-border 2s ease-in-out infinite;
+}
+
+#city-banner h3 {
+    color: var(--accent);
+    margin-bottom: 4px;
+}
+
+#city-banner h2 {
+    font-size: 22px;
+}
+
+@keyframes pulse-border {
+    0%, 100% { border-color: var(--accent); box-shadow: 0 0 8px rgba(233, 69, 96, 0.3); }
+    50% { border-color: var(--accent-glow); box-shadow: 0 0 16px rgba(233, 69, 96, 0.5); }
+}
+
+/* Video section */
+#video-container {
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+#video-container iframe {
+    width: 100%;
+    height: 100%;
+}
+
+#video-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+#video-title {
+    font-size: 12px;
+    color: var(--text-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+
+#skip-video-btn {
+    background: var(--bg-card);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+}
+
+#skip-video-btn:hover { background: var(--accent); }
+
+/* Radio section */
+#radio-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+#radio-header h3 {
+    margin-bottom: 0;
+    flex: 1;
+}
+
+.radio-icon {
+    font-size: 20px;
+}
+
+#radio-status {
+    font-size: 12px;
+    color: var(--text-dim);
+    padding: 2px 8px;
+    background: var(--bg-dark);
+    border-radius: 10px;
+}
+
+#radio-status.playing {
+    color: var(--success);
+    background: rgba(46, 213, 115, 0.1);
+}
+
+#station-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.station-btn {
+    background: var(--bg-dark);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.station-btn:hover {
+    border-color: var(--accent);
+    color: var(--text);
+}
+
+.station-btn.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+}
+
+#radio-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+#volume-slider {
+    flex: 1;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--bg-dark);
+    border-radius: 2px;
+    outline: none;
+}
+
+#volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+}
+
+/* Speed buttons */
+#speed-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.speed-btn {
+    background: var(--bg-dark);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.speed-btn:hover { border-color: var(--accent); color: var(--text); }
+.speed-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+/* Cities list */
+#cities-list {
+    list-style: none;
+}
+
+#cities-list li {
+    padding: 6px 0;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-dim);
+}
+
+#cities-list li .city-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border);
+    flex-shrink: 0;
+}
+
+#cities-list li.visited .city-dot {
+    background: var(--success);
+}
+
+#cities-list li.current {
+    color: var(--text);
+    font-weight: 600;
+}
+
+#cities-list li.current .city-dot {
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent);
+}
+
+/* Arrival overlay */
+#arrival-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+}
+
+#arrival-content {
+    text-align: center;
+    background: var(--bg-panel);
+    padding: 40px 60px;
+    border-radius: 16px;
+    border: 1px solid var(--accent);
+    box-shadow: 0 0 40px rgba(233, 69, 96, 0.3);
+}
+
+#arrival-content h1 {
+    font-size: 32px;
+    margin-bottom: 8px;
+}
+
+#arrival-content h2 {
+    font-size: 24px;
+    color: var(--accent-glow);
+    margin-bottom: 16px;
+}
+
+#trip-summary {
+    font-size: 14px;
+    color: var(--text-dim);
+    margin-bottom: 24px;
+    line-height: 1.6;
+}
+
+#new-trip-btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 10px 28px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+#new-trip-btn:hover { background: var(--accent-glow); }
+
+/* Utilities */
+.hidden { display: none !important; }

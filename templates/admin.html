@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin — City Videos</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        body { overflow: auto; }
+
+        .admin-container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .admin-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .admin-header h1 { font-size: 24px; }
+
+        .admin-nav a {
+            color: var(--accent);
+            text-decoration: none;
+            font-size: 14px;
+        }
+        .admin-nav a:hover { color: var(--accent-glow); }
+
+        /* ── Add / Edit form ────────────────────────── */
+        .video-form {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+
+        .video-form h2 {
+            font-size: 16px;
+            margin-bottom: 14px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .form-field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex: 1;
+            min-width: 140px;
+        }
+
+        .form-field.small { flex: 0 0 80px; min-width: 80px; }
+        .form-field.medium { flex: 0 0 140px; min-width: 140px; }
+
+        .form-field label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-dim);
+        }
+
+        .form-field input,
+        .form-field select {
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 8px 10px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .form-field input:focus,
+        .form-field select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+        }
+
+        .btn {
+            padding: 8px 18px;
+            border: none;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+            white-space: nowrap;
+        }
+        .btn:active { transform: scale(0.97); }
+
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:hover { background: var(--accent-glow); }
+
+        .btn-secondary { background: var(--bg-card); color: var(--text); border: 1px solid var(--border); }
+        .btn-secondary:hover { background: var(--border); }
+
+        .btn-danger { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+        .btn-danger:hover { background: var(--accent); color: white; }
+
+        .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+        /* ── Table ──────────────────────────────────── */
+        .table-container {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .table-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .table-toolbar h2 {
+            font-size: 14px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .record-count {
+            font-size: 12px;
+            color: var(--text-dim);
+            background: var(--bg-dark);
+            padding: 2px 10px;
+            border-radius: 10px;
+        }
+
+        /* ── Filter bar ────────────────────────────── */
+        .filter-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(0,0,0,0.15);
+            flex-wrap: wrap;
+        }
+
+        .filter-bar input,
+        .filter-bar select {
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .filter-bar input:focus,
+        .filter-bar select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .filter-bar input[type="text"] {
+            min-width: 220px;
+        }
+
+        .filter-bar label {
+            font-size: 11px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .filter-clear {
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            font-size: 12px;
+            cursor: pointer;
+            padding: 4px 8px;
+        }
+        .filter-clear:hover { color: var(--accent); }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead th {
+            text-align: left;
+            padding: 10px 14px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-dim);
+            background: var(--bg-dark);
+            border-bottom: 1px solid var(--border);
+            cursor: default;
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        thead th.sortable {
+            cursor: pointer;
+            transition: color 0.15s;
+        }
+
+        thead th.sortable:hover {
+            color: var(--text);
+        }
+
+        thead th .sort-arrow {
+            display: inline-block;
+            margin-left: 4px;
+            font-size: 10px;
+            opacity: 0.3;
+            transition: opacity 0.15s;
+        }
+
+        thead th.sort-asc .sort-arrow,
+        thead th.sort-desc .sort-arrow {
+            opacity: 1;
+            color: var(--accent);
+        }
+
+        tbody td {
+            padding: 10px 14px;
+            font-size: 13px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+
+        tbody tr:last-child td { border-bottom: none; }
+
+        tbody tr:hover { background: rgba(233, 69, 96, 0.05); }
+
+        /* Inline edit inputs */
+        td input.inline-edit {
+            background: var(--bg-dark);
+            border: 1px solid var(--accent);
+            color: var(--text);
+            padding: 4px 6px;
+            border-radius: 3px;
+            font-size: 13px;
+            width: 100%;
+        }
+
+        .actions-cell {
+            display: flex;
+            gap: 6px;
+            white-space: nowrap;
+        }
+
+        .yt-link {
+            color: var(--accent);
+            text-decoration: none;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .yt-link:hover { color: var(--accent-glow); }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-dim);
+        }
+
+        .empty-state p { margin-bottom: 12px; }
+
+        /* ── Pagination ────────────────────────────── */
+        .pagination-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 16px;
+            border-top: 1px solid var(--border);
+            font-size: 12px;
+            color: var(--text-dim);
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .pagination-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .pagination-info select {
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 3px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        .pagination-info select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .pagination-nav {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .page-btn {
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            color: var(--text-dim);
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .page-btn:hover:not(:disabled) {
+            border-color: var(--accent);
+            color: var(--text);
+        }
+
+        .page-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        .page-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .page-ellipsis {
+            color: var(--text-dim);
+            font-size: 12px;
+            padding: 0 2px;
+        }
+
+        /* ── Toast notifications ────────────────────── */
+        .toast-container {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .toast {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            animation: slideIn 0.2s ease;
+        }
+
+        .toast.success { border-color: var(--success); }
+        .toast.error { border-color: var(--accent); }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(40px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="toast-container" id="toast-container"></div>
+
+    <div class="admin-container">
+        <div class="admin-header">
+            <h1>&#127909; City Videos Manager</h1>
+            <nav class="admin-nav">
+                <a href="/">&larr; Back to Road Trip</a>
+            </nav>
+        </div>
+
+        <!-- Add Video Form -->
+        <div class="video-form" id="add-form">
+            <h2 id="form-title">Add New Video</h2>
+            <input type="hidden" id="edit-id" value="">
+            <div class="form-row">
+                <div class="form-field">
+                    <label for="f-city">City Name</label>
+                    <input type="text" id="f-city" placeholder="Columbus">
+                </div>
+                <div class="form-field small">
+                    <label for="f-state">State</label>
+                    <input type="text" id="f-state" placeholder="OH" maxlength="2">
+                </div>
+                <div class="form-field medium">
+                    <label for="f-ytid">YouTube ID</label>
+                    <input type="text" id="f-ytid" placeholder="dQw4w9WgXcQ">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-field">
+                    <label for="f-title">Video Title</label>
+                    <input type="text" id="f-title" placeholder="Visit Columbus Ohio">
+                </div>
+                <div class="form-field small">
+                    <label for="f-duration">Duration (s)</label>
+                    <input type="number" id="f-duration" placeholder="300">
+                </div>
+                <div class="form-actions">
+                    <button class="btn btn-primary" id="save-btn" onclick="saveVideo()">Add Video</button>
+                    <button class="btn btn-secondary hidden" id="cancel-btn" onclick="cancelEdit()">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div class="table-container">
+            <div class="table-toolbar">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <h2>Videos</h2>
+                    <span class="record-count" id="record-count">0</span>
+                    <span class="record-count" id="filtered-count" style="display:none;"></span>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="importFromJson()">Import from JSON</button>
+            </div>
+
+            <!-- Filter bar -->
+            <div class="filter-bar">
+                <div class="filter-group">
+                    <label for="filter-search">&#128269;</label>
+                    <input type="text" id="filter-search" placeholder="Search city, title, YouTube ID...">
+                </div>
+                <div class="filter-group">
+                    <label for="filter-state">State</label>
+                    <select id="filter-state">
+                        <option value="">All States</option>
+                    </select>
+                </div>
+                <button class="filter-clear" id="filter-clear-btn" onclick="clearFilters()" style="display:none;">Clear filters</button>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th class="sortable" data-sort="city_name" onclick="toggleSort('city_name')">
+                            City <span class="sort-arrow">&#9650;</span>
+                        </th>
+                        <th class="sortable" data-sort="state" onclick="toggleSort('state')">
+                            State <span class="sort-arrow">&#9650;</span>
+                        </th>
+                        <th class="sortable" data-sort="youtube_id" onclick="toggleSort('youtube_id')">
+                            YouTube ID <span class="sort-arrow">&#9650;</span>
+                        </th>
+                        <th class="sortable" data-sort="title" onclick="toggleSort('title')">
+                            Title <span class="sort-arrow">&#9650;</span>
+                        </th>
+                        <th class="sortable" data-sort="duration_seconds" onclick="toggleSort('duration_seconds')">
+                            Duration <span class="sort-arrow">&#9650;</span>
+                        </th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="video-tbody">
+                    <tr><td colspan="6" class="empty-state"><p>No videos yet.</p><p>Add one above or import from JSON.</p></td></tr>
+                </tbody>
+            </table>
+
+            <!-- Pagination -->
+            <div class="pagination-bar" id="pagination-bar">
+                <div class="pagination-info">
+                    <span id="page-range-text">0 of 0</span>
+                    <label>Rows:
+                        <select id="page-size" onchange="changePageSize()">
+                            <option value="10">10</option>
+                            <option value="25" selected>25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="pagination-nav" id="pagination-nav"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ── State ──────────────────────────────────────────────
+        let allVideos = [];      // raw from server
+        let filtered = [];       // after search + filter
+        let sortCol = "city_name";
+        let sortDir = "asc";     // "asc" or "desc"
+        let currentPage = 1;
+        let pageSize = 25;
+
+        // ── Load & render ──────────────────────────────────────
+        async function loadVideos() {
+            try {
+                const resp = await fetch("/api/videos");
+                allVideos = await resp.json();
+                populateStateFilter();
+                applyPipeline();
+            } catch (e) {
+                toast("Failed to load videos", "error");
+            }
+        }
+
+        /** Central pipeline: filter → sort → paginate → render */
+        function applyPipeline() {
+            filtered = applyFilters(allVideos);
+            filtered = applySort(filtered);
+            // Clamp current page
+            const maxPage = Math.max(1, Math.ceil(filtered.length / pageSize));
+            if (currentPage > maxPage) currentPage = maxPage;
+            renderTable();
+            renderPagination();
+            updateCounts();
+        }
+
+        // ── Filtering ─────────────────────────────────────────
+        function applyFilters(data) {
+            const searchVal = document.getElementById("filter-search").value.trim().toLowerCase();
+            const stateVal = document.getElementById("filter-state").value;
+
+            let result = data;
+
+            if (stateVal) {
+                result = result.filter(v => v.state === stateVal);
+            }
+
+            if (searchVal) {
+                result = result.filter(v => {
+                    const hay = [v.city_name, v.state, v.youtube_id, v.title, v.full_name]
+                        .filter(Boolean).join(" ").toLowerCase();
+                    return hay.includes(searchVal);
+                });
+            }
+
+            // Show/hide clear button
+            const clearBtn = document.getElementById("filter-clear-btn");
+            clearBtn.style.display = (searchVal || stateVal) ? "" : "none";
+
+            return result;
+        }
+
+        function clearFilters() {
+            document.getElementById("filter-search").value = "";
+            document.getElementById("filter-state").value = "";
+            currentPage = 1;
+            applyPipeline();
+        }
+
+        function populateStateFilter() {
+            const select = document.getElementById("filter-state");
+            const currentVal = select.value;
+            const states = [...new Set(allVideos.map(v => v.state).filter(Boolean))].sort();
+
+            // Keep the "All States" option, rebuild the rest
+            select.innerHTML = '<option value="">All States</option>';
+            for (const s of states) {
+                const opt = document.createElement("option");
+                opt.value = s;
+                opt.textContent = s;
+                select.appendChild(opt);
+            }
+            // Restore selection if it still exists
+            if (states.includes(currentVal)) select.value = currentVal;
+        }
+
+        // Wire up filter inputs
+        document.getElementById("filter-search").addEventListener("input", () => {
+            currentPage = 1;
+            applyPipeline();
+        });
+        document.getElementById("filter-state").addEventListener("change", () => {
+            currentPage = 1;
+            applyPipeline();
+        });
+
+        // ── Sorting ───────────────────────────────────────────
+        function applySort(data) {
+            const col = sortCol;
+            const dir = sortDir === "asc" ? 1 : -1;
+
+            return [...data].sort((a, b) => {
+                let va = a[col];
+                let vb = b[col];
+
+                // Nulls last
+                if (va == null && vb == null) return 0;
+                if (va == null) return 1;
+                if (vb == null) return -1;
+
+                // Numeric column
+                if (col === "duration_seconds") {
+                    return (va - vb) * dir;
+                }
+
+                // String compare
+                va = String(va).toLowerCase();
+                vb = String(vb).toLowerCase();
+                if (va < vb) return -1 * dir;
+                if (va > vb) return 1 * dir;
+                return 0;
+            });
+        }
+
+        function toggleSort(col) {
+            if (sortCol === col) {
+                sortDir = sortDir === "asc" ? "desc" : "asc";
+            } else {
+                sortCol = col;
+                sortDir = "asc";
+            }
+            updateSortUI();
+            applyPipeline();
+        }
+
+        function updateSortUI() {
+            document.querySelectorAll("thead th.sortable").forEach(th => {
+                const col = th.dataset.sort;
+                th.classList.remove("sort-asc", "sort-desc");
+                const arrow = th.querySelector(".sort-arrow");
+                if (col === sortCol) {
+                    th.classList.add(sortDir === "asc" ? "sort-asc" : "sort-desc");
+                    arrow.innerHTML = sortDir === "asc" ? "&#9650;" : "&#9660;";
+                } else {
+                    arrow.innerHTML = "&#9650;";
+                }
+            });
+        }
+
+        // ── Pagination ────────────────────────────────────────
+        function getPage(data) {
+            const start = (currentPage - 1) * pageSize;
+            return data.slice(start, start + pageSize);
+        }
+
+        function changePageSize() {
+            pageSize = parseInt(document.getElementById("page-size").value, 10);
+            currentPage = 1;
+            applyPipeline();
+        }
+
+        function goToPage(p) {
+            const maxPage = Math.max(1, Math.ceil(filtered.length / pageSize));
+            currentPage = Math.max(1, Math.min(p, maxPage));
+            applyPipeline();
+        }
+
+        function renderPagination() {
+            const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+            const nav = document.getElementById("pagination-nav");
+            nav.innerHTML = "";
+
+            if (totalPages <= 1) {
+                document.getElementById("pagination-bar").style.display = filtered.length === 0 ? "none" : "";
+                return;
+            }
+            document.getElementById("pagination-bar").style.display = "";
+
+            // Prev button
+            addPageBtn(nav, "&laquo;", currentPage - 1, currentPage === 1);
+
+            // Page numbers with ellipsis
+            const pages = buildPageNumbers(currentPage, totalPages);
+            for (const p of pages) {
+                if (p === "...") {
+                    const span = document.createElement("span");
+                    span.className = "page-ellipsis";
+                    span.textContent = "...";
+                    nav.appendChild(span);
+                } else {
+                    addPageBtn(nav, String(p), p, false, p === currentPage);
+                }
+            }
+
+            // Next button
+            addPageBtn(nav, "&raquo;", currentPage + 1, currentPage === totalPages);
+        }
+
+        function addPageBtn(container, label, page, disabled, active) {
+            const btn = document.createElement("button");
+            btn.className = "page-btn" + (active ? " active" : "");
+            btn.innerHTML = label;
+            btn.disabled = disabled;
+            if (!disabled && !active) {
+                btn.addEventListener("click", () => goToPage(page));
+            }
+            container.appendChild(btn);
+        }
+
+        /**
+         * Build smart page number list like: [1, 2, "...", 5, 6, 7, "...", 12, 13]
+         * Always shows first 2, last 2, and 1 neighbor on each side of current.
+         */
+        function buildPageNumbers(current, total) {
+            if (total <= 7) {
+                return Array.from({ length: total }, (_, i) => i + 1);
+            }
+
+            const pages = new Set();
+            // Always include first 2 and last 2
+            pages.add(1); pages.add(2);
+            pages.add(total - 1); pages.add(total);
+            // Current and neighbors
+            for (let i = current - 1; i <= current + 1; i++) {
+                if (i >= 1 && i <= total) pages.add(i);
+            }
+
+            const sorted = [...pages].sort((a, b) => a - b);
+            const result = [];
+            for (let i = 0; i < sorted.length; i++) {
+                if (i > 0 && sorted[i] - sorted[i - 1] > 1) {
+                    result.push("...");
+                }
+                result.push(sorted[i]);
+            }
+            return result;
+        }
+
+        // ── Render ────────────────────────────────────────────
+        function updateCounts() {
+            document.getElementById("record-count").textContent = allVideos.length + " total";
+            const fc = document.getElementById("filtered-count");
+            if (filtered.length !== allVideos.length) {
+                fc.textContent = filtered.length + " shown";
+                fc.style.display = "";
+            } else {
+                fc.style.display = "none";
+            }
+
+            // Page range text
+            const start = filtered.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+            const end = Math.min(currentPage * pageSize, filtered.length);
+            document.getElementById("page-range-text").textContent =
+                `${start}–${end} of ${filtered.length}`;
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById("video-tbody");
+            const pageData = getPage(filtered);
+
+            if (filtered.length === 0) {
+                const isFiltered = document.getElementById("filter-search").value || document.getElementById("filter-state").value;
+                tbody.innerHTML = isFiltered
+                    ? '<tr><td colspan="6" class="empty-state"><p>No videos match your filters.</p></td></tr>'
+                    : '<tr><td colspan="6" class="empty-state"><p>No videos yet.</p><p>Add one above or import from JSON.</p></td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = pageData.map(v => `
+                <tr data-id="${v.id}">
+                    <td>${esc(v.city_name)}</td>
+                    <td>${esc(v.state || "")}</td>
+                    <td><a class="yt-link" href="https://youtube.com/watch?v=${esc(v.youtube_id)}" target="_blank" rel="noopener">${esc(v.youtube_id)}</a></td>
+                    <td>${esc(v.title || "")}</td>
+                    <td>${v.duration_seconds != null ? formatDuration(v.duration_seconds) : "—"}</td>
+                    <td>
+                        <div class="actions-cell">
+                            <button class="btn btn-secondary btn-sm" onclick="startEdit(${v.id})">Edit</button>
+                            <button class="btn btn-danger btn-sm" onclick="confirmDelete(${v.id}, '${esc(v.full_name)}')">Delete</button>
+                        </div>
+                    </td>
+                </tr>
+            `).join("");
+        }
+
+        function esc(s) {
+            if (!s) return "";
+            const d = document.createElement("div");
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        function formatDuration(s) {
+            if (s == null) return "—";
+            const m = Math.floor(s / 60);
+            const sec = s % 60;
+            return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+        }
+
+        // ── Add / Edit ─────────────────────────────────────────
+        async function saveVideo() {
+            const editId = document.getElementById("edit-id").value;
+            const payload = {
+                city_name: document.getElementById("f-city").value.trim(),
+                state: document.getElementById("f-state").value.trim(),
+                youtube_id: document.getElementById("f-ytid").value.trim(),
+                title: document.getElementById("f-title").value.trim(),
+                duration_seconds: document.getElementById("f-duration").value || null,
+            };
+
+            if (!payload.city_name || !payload.youtube_id) {
+                toast("City name and YouTube ID are required", "error");
+                return;
+            }
+
+            try {
+                let resp;
+                if (editId) {
+                    resp = await fetch(`/api/videos/${editId}`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload),
+                    });
+                } else {
+                    resp = await fetch("/api/videos", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload),
+                    });
+                }
+
+                if (!resp.ok) {
+                    const err = await resp.json();
+                    toast(err.error || "Save failed", "error");
+                    return;
+                }
+
+                toast(editId ? "Video updated" : "Video added", "success");
+                clearForm();
+                loadVideos();
+            } catch (e) {
+                toast("Network error", "error");
+            }
+        }
+
+        function startEdit(id) {
+            const v = allVideos.find(v => v.id === id);
+            if (!v) return;
+
+            document.getElementById("edit-id").value = v.id;
+            document.getElementById("f-city").value = v.city_name;
+            document.getElementById("f-state").value = v.state || "";
+            document.getElementById("f-ytid").value = v.youtube_id;
+            document.getElementById("f-title").value = v.title || "";
+            document.getElementById("f-duration").value = v.duration_seconds || "";
+
+            document.getElementById("form-title").textContent = `Editing: ${v.full_name}`;
+            document.getElementById("save-btn").textContent = "Save Changes";
+            document.getElementById("cancel-btn").classList.remove("hidden");
+
+            document.getElementById("add-form").scrollIntoView({ behavior: "smooth" });
+        }
+
+        function cancelEdit() {
+            clearForm();
+        }
+
+        function clearForm() {
+            document.getElementById("edit-id").value = "";
+            document.getElementById("f-city").value = "";
+            document.getElementById("f-state").value = "";
+            document.getElementById("f-ytid").value = "";
+            document.getElementById("f-title").value = "";
+            document.getElementById("f-duration").value = "";
+            document.getElementById("form-title").textContent = "Add New Video";
+            document.getElementById("save-btn").textContent = "Add Video";
+            document.getElementById("cancel-btn").classList.add("hidden");
+        }
+
+        // ── Delete ──────────────────────────────────────────────
+        async function confirmDelete(id, name) {
+            if (!confirm(`Delete video for "${name}"?`)) return;
+
+            try {
+                const resp = await fetch(`/api/videos/${id}`, { method: "DELETE" });
+                if (!resp.ok) {
+                    toast("Delete failed", "error");
+                    return;
+                }
+                toast(`Deleted ${name}`, "success");
+                loadVideos();
+            } catch (e) {
+                toast("Network error", "error");
+            }
+        }
+
+        // ── Import from JSON ────────────────────────────────────
+        async function importFromJson() {
+            try {
+                const resp = await fetch("/api/videos/import", { method: "POST" });
+                const data = await resp.json();
+                if (!resp.ok) {
+                    toast(data.error || "Import failed", "error");
+                    return;
+                }
+                toast(`Imported ${data.imported} videos from JSON`, "success");
+                loadVideos();
+            } catch (e) {
+                toast("Network error", "error");
+            }
+        }
+
+        // ── Toast ───────────────────────────────────────────────
+        function toast(message, type = "success") {
+            const container = document.getElementById("toast-container");
+            const el = document.createElement("div");
+            el.className = `toast ${type}`;
+            el.textContent = message;
+            container.appendChild(el);
+            setTimeout(() => { el.remove(); }, 3000);
+        }
+
+        // ── Init ────────────────────────────────────────────────
+        updateSortUI();
+        loadVideos();
+    </script>
+</body>
+</html>

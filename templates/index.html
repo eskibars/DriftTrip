@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtual Road Trip</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- Top bar: trip setup -->
+    <header id="setup-bar">
+        <div class="setup-form">
+            <div class="input-group">
+                <label for="source">From</label>
+                <input type="text" id="source" placeholder="Cincinnati, OH" value="Cincinnati, OH">
+            </div>
+            <div class="input-group">
+                <label for="destination">To</label>
+                <input type="text" id="destination" placeholder="Cleveland, OH" value="Cleveland, OH">
+            </div>
+            <div class="input-group">
+                <label for="speed">Speed</label>
+                <select id="speed">
+                    {% for s in speed_options %}
+                    <option value="{{ s }}" {{ 'selected' if s == 10 else '' }}>{{ s }}x</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button id="start-btn">Start Road Trip</button>
+            <a href="/admin" style="color:var(--text-dim); font-size:12px; text-decoration:none; margin-left:auto; align-self:center;" title="Manage city videos">&#9881; Admin</a>
+        </div>
+    </header>
+
+    <!-- Main content: map + side panel -->
+    <main id="main-content">
+        <div id="map-container">
+            <div id="map"></div>
+        </div>
+
+        <div id="side-panel">
+            <!-- Trip status -->
+            <div id="trip-status" class="panel-section">
+                <h2>Virtual Road Trip</h2>
+                <p id="status-text">Enter your route and hit Start!</p>
+                <div id="progress-container" class="hidden">
+                    <div id="progress-bar"><div id="progress-fill"></div></div>
+                    <div id="progress-info">
+                        <span id="progress-percent">0%</span>
+                        <span id="eta-text"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- City arrival -->
+            <div id="city-arrival" class="panel-section hidden">
+                <div id="city-banner">
+                    <h3>Now Arriving</h3>
+                    <h2 id="city-name"></h2>
+                </div>
+            </div>
+
+            <!-- Video player -->
+            <div id="video-section" class="panel-section hidden">
+                <div id="video-container">
+                    <div id="youtube-player"></div>
+                </div>
+                <div id="video-controls">
+                    <span id="video-title"></span>
+                    <button id="skip-video-btn">Skip Video &raquo;</button>
+                </div>
+            </div>
+
+            <!-- Radio controls -->
+            <div id="radio-section" class="panel-section">
+                <div id="radio-header">
+                    <span class="radio-icon">&#128251;</span>
+                    <h3>Road Trip Radio</h3>
+                    <span id="radio-status">Off</span>
+                </div>
+                <div id="station-list"></div>
+                <div id="radio-controls">
+                    <label for="volume-slider">Vol</label>
+                    <input type="range" id="volume-slider" min="0" max="100" value="70">
+                </div>
+            </div>
+
+            <!-- Speed control (during trip) -->
+            <div id="speed-control" class="panel-section hidden">
+                <h3>Trip Speed</h3>
+                <div id="speed-buttons"></div>
+            </div>
+
+            <!-- Upcoming cities -->
+            <div id="cities-section" class="panel-section hidden">
+                <h3>Upcoming Stops</h3>
+                <ul id="cities-list"></ul>
+            </div>
+        </div>
+    </main>
+
+    <!-- Arrival overlay -->
+    <div id="arrival-overlay" class="hidden">
+        <div id="arrival-content">
+            <h1>&#127937; You've Arrived!</h1>
+            <h2 id="arrival-destination"></h2>
+            <div id="trip-summary"></div>
+            <button id="new-trip-btn">Plan Another Trip</button>
+        </div>
+    </div>
+
+    <!-- Load YouTube IFrame API -->
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <!-- Load Google Maps -->
+    <script>
+        window.GOOGLE_MAPS_API_KEY = "{{ google_maps_api_key }}";
+        window.SPEED_OPTIONS = {{ speed_options | tojson }};
+    </script>
+    <script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=geometry,marker&callback=onGoogleMapsReady&v=weekly" async defer></script>
+    <script src="/static/js/map.js"></script>
+    <script src="/static/js/radio.js"></script>
+    <script src="/static/js/video.js"></script>
+    <script src="/static/js/trip.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
