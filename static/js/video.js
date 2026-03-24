@@ -61,10 +61,9 @@ const VideoPlayer = (function () {
 
         if (!city.video) {
             // No video for this city — show banner briefly, then continue
-            titleEl().textContent = "No tourism video available";
-            sectionEl().classList.remove("hidden");
+            // Do NOT show the video section (it would display the last played video)
             setTimeout(() => {
-                hide();
+                cityArrivalEl().classList.add("hidden");
                 if (onVideoEndCallback) onVideoEndCallback();
             }, 3000);
             return;
