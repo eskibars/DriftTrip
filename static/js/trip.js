@@ -18,9 +18,13 @@ const TripController = (function () {
     let speedMultiplier = 10;
     let tripStartTime = null;
     let citiesVisited = 0;
+    let videoRefreshTimer = null;
 
     // City proximity threshold (fraction of total route)
     const CITY_THRESHOLD = 0.008;
+
+    // How often to refresh video data from the server (ms)
+    const VIDEO_REFRESH_INTERVAL = 60000;
 
     function getState() {
         return state;
@@ -77,6 +81,9 @@ const TripController = (function () {
             if (station) {
                 RadioPlayer.play();
             }
+
+            // Start periodic video refresh
+            startVideoRefresh();
 
             // Start car animation
             setState(DRIVING);
@@ -154,6 +161,7 @@ const TripController = (function () {
 
     function arrive() {
         setState(ARRIVED);
+        stopVideoRefresh();
         MapController.stop();
         RadioPlayer.pause();
 
@@ -178,6 +186,7 @@ const TripController = (function () {
 
     function reset() {
         setState(IDLE);
+        stopVideoRefresh();
         MapController.stop();
         MapController.clearRoute();
         RadioPlayer.pause();
@@ -194,6 +203,58 @@ const TripController = (function () {
 
         hideTripUI();
         updateStatusText("Enter your route and hit Start!");
+    }
+
+    // --- Video refresh polling ---
+
+    function startVideoRefresh() {
+        stopVideoRefresh();
+        videoRefreshTimer = setInterval(refreshCityVideos, VIDEO_REFRESH_INTERVAL);
+    }
+
+    function stopVideoRefresh() {
+        if (videoRefreshTimer) {
+            clearInterval(videoRefreshTimer);
+            videoRefreshTimer = null;
+        }
+    }
+
+    async function refreshCityVideos() {
+        // Only refresh for cities we haven't visited yet
+        const unvisited = cities.filter(c => !c.visited);
+        if (unvisited.length === 0) return;
+
+        const cityNames = unvisited.map(c => c.full_name);
+        try {
+            const resp = await fetch("/api/videos/lookup", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ cities: cityNames }),
+            });
+            if (!resp.ok) return;
+
+            const videoMap = await resp.json();
+            let changed = false;
+
+            for (const city of cities) {
+                if (city.visited) continue;
+                const freshVideo = videoMap[city.full_name] || null;
+                const hadVideo = city.video ? city.video.youtube_id : null;
+                const hasVideo = freshVideo ? freshVideo.youtube_id : null;
+
+                if (hadVideo !== hasVideo || (freshVideo && city.video && freshVideo.title !== city.video.title)) {
+                    city.video = freshVideo;
+                    changed = true;
+                }
+            }
+
+            if (changed) {
+                renderCitiesList();
+                console.log("City videos refreshed from server");
+            }
+        } catch (e) {
+            // Silent fail — will retry next interval
+        }
     }
 
     // --- UI helpers ---

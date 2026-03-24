@@ -215,6 +215,20 @@ def get_radio_stations():
 
 # ── Videos CRUD API ──────────────────────────────────────────────────────────
 
+@app.route("/api/videos/lookup", methods=["POST"])
+def lookup_videos():
+    """Look up videos for a list of city full_names. Used by the frontend
+    to refresh video data for cities along the current route mid-trip."""
+    data = request.get_json()
+    city_names = data.get("cities", []) if data else []
+    result = {}
+    for name in city_names:
+        video = db.get_video_for_city(name)
+        if video:
+            result[name] = video
+    return jsonify(result)
+
+
 @app.route("/api/videos", methods=["GET"])
 def list_videos():
     return jsonify(db.get_all_videos())
