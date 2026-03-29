@@ -1,6 +1,7 @@
 import json
 import math
-from flask import Flask, render_template, request, jsonify
+import os
+from flask import Flask, render_template, request, jsonify, send_from_directory
 import googlemaps
 import polyline as polyline_codec
 import config
@@ -126,6 +127,15 @@ def attach_videos(cities):
 
 
 # ── Page routes ──────────────────────────────────────────────────────────────
+
+@app.route("/favicon.ico")
+def favicon():
+    return send_from_directory(
+        os.path.join(app.root_path, "static", "img"),
+        "favicon.ico",
+        mimetype="image/x-icon",
+    )
+
 
 @app.route("/")
 def index():
