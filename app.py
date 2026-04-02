@@ -216,11 +216,91 @@ def get_route():
 
 @app.route("/api/radio-stations")
 def get_radio_stations():
+    stations = db.get_stations_for_frontend()
+    return jsonify({"stations": stations})
+
+
+# ── Radio Stations CRUD API ──────────────────────────────────────────────────
+
+@app.route("/api/stations", methods=["GET"])
+def list_stations():
+    return jsonify(db.get_all_stations())
+
+
+@app.route("/api/stations", methods=["POST"])
+def create_station():
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+
+    station_id = (data.get("station_id") or "").strip()
+    name = (data.get("name") or "").strip()
+    frequency = (data.get("frequency") or "").strip() or None
+    stype = (data.get("type") or "").strip()
+    source = (data.get("source") or "").strip()
+    description = (data.get("description") or "").strip() or None
+    sort_order = data.get("sort_order", 0)
+
+    if not station_id or not name or not stype or not source:
+        return jsonify({"error": "station_id, name, type, and source are required"}), 400
+
+    if stype not in ("youtube", "mp3"):
+        return jsonify({"error": "type must be 'youtube' or 'mp3'"}), 400
+
     try:
-        data = load_json_file("radio_stations.json")
+        sort_order = int(sort_order)
+    except (ValueError, TypeError):
+        sort_order = 0
+
+    try:
+        station = db.add_station(station_id, name, frequency, stype, source, description, sort_order)
+        return jsonify(station), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 409
+
+
+@app.route("/api/stations/<int:row_id>", methods=["PUT"])
+def update_station(row_id):
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+
+    fields = {}
+    for key in ("station_id", "name", "frequency", "type", "source", "description"):
+        if key in data:
+            fields[key] = (data[key] or "").strip() or None
+    if "sort_order" in data:
+        try:
+            fields["sort_order"] = int(data["sort_order"])
+        except (ValueError, TypeError):
+            pass
+
+    if "type" in fields and fields["type"] not in ("youtube", "mp3", None):
+        return jsonify({"error": "type must be 'youtube' or 'mp3'"}), 400
+
+    station = db.update_station(row_id, **fields)
+    if station is None:
+        return jsonify({"error": "Station not found"}), 404
+    return jsonify(station)
+
+
+@app.route("/api/stations/<int:row_id>", methods=["DELETE"])
+def delete_station(row_id):
+    if db.delete_station(row_id):
+        return jsonify({"ok": True})
+    return jsonify({"error": "Station not found"}), 404
+
+
+@app.route("/api/stations/import", methods=["POST"])
+def import_stations():
+    """One-time import from the legacy radio_stations.json file."""
+    try:
+        count = db.import_stations_from_json("radio_stations.json")
+        return jsonify({"imported": count})
     except FileNotFoundError:
-        data = {"stations": []}
-    return jsonify(data)
+        return jsonify({"error": "radio_stations.json not found"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ── Videos CRUD API ──────────────────────────────────────────────────────────
@@ -314,4 +394,4 @@ def import_videos():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(debug=True, host="0.0.0.0", port=12398)

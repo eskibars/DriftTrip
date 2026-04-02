@@ -1,7 +1,7 @@
 """
-db.py — SQLite database module for city tourism videos.
+db.py — SQLite database module for city tourism videos and radio stations.
 
-Provides CRUD operations and a one-time migration helper from the old JSON format.
+Provides CRUD operations and one-time migration helpers from the old JSON formats.
 """
 
 import json
@@ -20,6 +20,18 @@ CREATE TABLE IF NOT EXISTS city_videos (
     youtube_id TEXT NOT NULL,
     title TEXT,
     duration_seconds INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS radio_stations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    station_id TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    frequency TEXT,
+    type TEXT NOT NULL CHECK(type IN ('youtube', 'mp3')),
+    source TEXT NOT NULL,
+    description TEXT,
+    sort_order INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 """
@@ -139,4 +151,87 @@ def import_from_json(json_path="data/city_videos.json"):
             except sqlite3.IntegrityError:
                 pass  # Duplicate full_name, skip
 
+    return count
+
+
+# ── Radio Stations ───────────────────────────────────────────────────────────
+
+def get_all_stations():
+    """Return all radio stations ordered by sort_order then name."""
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, station_id, name, frequency, type, source, description, sort_order, created_at "
+            "FROM radio_stations ORDER BY sort_order, name"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_stations_for_frontend():
+    """Return stations in the format the frontend radio.js expects."""
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT station_id AS id, name, frequency, type, source, description "
+            "FROM radio_stations ORDER BY sort_order, name"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def add_station(station_id, name, frequency, stype, source, description=None, sort_order=0):
+    """Insert a new radio station. Returns the new record as a dict."""
+    with _get_conn() as conn:
+        cursor = conn.execute(
+            "INSERT INTO radio_stations (station_id, name, frequency, type, source, description, sort_order) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (station_id, name, frequency, stype, source, description, sort_order),
+        )
+        row = conn.execute("SELECT * FROM radio_stations WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    return dict(row)
+
+
+def update_station(row_id, **fields):
+    """Update an existing station. Accepts any subset of: station_id, name, frequency, type, source, description, sort_order."""
+    allowed = {"station_id", "name", "frequency", "type", "source", "description", "sort_order"}
+    updates = {k: v for k, v in fields.items() if k in allowed}
+    if not updates:
+        return None
+
+    with _get_conn() as conn:
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        values = list(updates.values()) + [row_id]
+        conn.execute(f"UPDATE radio_stations SET {set_clause} WHERE id = ?", values)
+        row = conn.execute("SELECT * FROM radio_stations WHERE id = ?", (row_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def delete_station(row_id):
+    """Delete a radio station by ID. Returns True if a row was deleted."""
+    with _get_conn() as conn:
+        cursor = conn.execute("DELETE FROM radio_stations WHERE id = ?", (row_id,))
+    return cursor.rowcount > 0
+
+
+def import_stations_from_json(json_path="radio_stations.json"):
+    """One-time migration: import stations from the old JSON file into SQLite.
+    Returns the count of records imported."""
+    if not os.path.exists(json_path):
+        raise FileNotFoundError(f"JSON file not found: {json_path}")
+
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    stations = data.get("stations", [])
+    count = 0
+    with _get_conn() as conn:
+        for i, s in enumerate(stations):
+            try:
+                conn.execute(
+                    "INSERT OR IGNORE INTO radio_stations (station_id, name, frequency, type, source, description, sort_order) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (s.get("id", ""), s.get("name", ""), s.get("frequency"),
+                     s.get("type", "youtube"), s.get("source", ""),
+                     s.get("description"), i),
+                )
+                count += 1
+            except sqlite3.IntegrityError:
+                pass
     return count
