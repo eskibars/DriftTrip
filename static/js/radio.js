@@ -8,6 +8,7 @@ const RadioPlayer = (function () {
     let stations = [];
     let currentStation = null;
     let volume = 70; // 0-100
+    let playing = false;
 
     // YouTube player (hidden, audio only)
     let ytPlayer = null;
@@ -133,6 +134,7 @@ const RadioPlayer = (function () {
         } else if (currentStation.type === "mp3") {
             audioEl.play().catch(() => {});
         }
+        playing = true;
         updateStatus("playing");
     }
 
@@ -143,7 +145,20 @@ const RadioPlayer = (function () {
         if (currentStation && currentStation.type === "mp3") {
             audioEl.pause();
         }
+        playing = false;
         updateStatus("paused");
+    }
+
+    function toggle() {
+        if (playing) {
+            pause();
+        } else {
+            play();
+        }
+    }
+
+    function isPlaying() {
+        return playing;
     }
 
     function setVolume(v) {
@@ -178,6 +193,8 @@ const RadioPlayer = (function () {
         switchStation,
         play,
         pause,
+        toggle,
+        isPlaying,
         setVolume,
         getCurrentStation,
     };

@@ -6,7 +6,7 @@ load_dotenv()
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 YOUTUBE_DATA_API_KEY = os.getenv("YOUTUBE_DATA_API_KEY", "")
 
-SPEED_OPTIONS = [2, 5, 10, 20, 50, 100]
+SPEED_OPTIONS = [0.5, 1, 2, 5, 10, 20, 50, 100]
 
 # How many points to sample along route for city detection
 ROUTE_SAMPLE_COUNT = 15

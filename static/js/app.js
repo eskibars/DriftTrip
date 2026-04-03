@@ -33,6 +33,11 @@ function initApp() {
         })
         .catch((err) => console.warn("Failed to load radio stations:", err));
 
+    // Radio pause/resume button
+    document.getElementById("radio-pause-btn").addEventListener("click", () => {
+        RadioPlayer.toggle();
+    });
+
     // Volume slider
     document.getElementById("volume-slider").addEventListener("input", (e) => {
         RadioPlayer.setVolume(parseInt(e.target.value, 10));
@@ -42,7 +47,7 @@ function initApp() {
     document.getElementById("start-btn").addEventListener("click", () => {
         const source = document.getElementById("source").value.trim();
         const destination = document.getElementById("destination").value.trim();
-        const speed = parseInt(document.getElementById("speed").value, 10);
+        const speed = parseFloat(document.getElementById("speed").value);
 
         if (!source || !destination) {
             alert("Please enter a source and destination");
