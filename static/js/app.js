@@ -1,17 +1,34 @@
 /**
  * app.js — Entry point. Wires together map, radio, video, and trip controller.
+ *
+ * Both Google Maps and YouTube IFrame API load async. We gate on both being
+ * ready before enabling the UI, so there's no race condition on slow connections.
  */
 
-// Google Maps ready callback (called by the Maps script)
+let _mapsReady = false;
+let _ytReady = false;
+let _appInitialized = false;
+
+// Google Maps ready callback (called by the Maps script tag)
 function onGoogleMapsReady() {
+    _mapsReady = true;
     MapController.init();
     console.log("Google Maps initialized");
+    maybeInitApp();
 }
 
-// YouTube IFrame API ready callback (called automatically by the API)
+// YouTube IFrame API ready callback (called automatically by the API script)
 function onYouTubeIframeAPIReady() {
+    _ytReady = true;
     console.log("YouTube IFrame API ready");
-    initApp();
+    maybeInitApp();
+}
+
+function maybeInitApp() {
+    if (_mapsReady && _ytReady && !_appInitialized) {
+        _appInitialized = true;
+        initApp();
+    }
 }
 
 function initApp() {
@@ -43,8 +60,13 @@ function initApp() {
         RadioPlayer.setVolume(parseInt(e.target.value, 10));
     });
 
+    // Enable the start button now that both APIs are loaded
+    const startBtn = document.getElementById("start-btn");
+    startBtn.disabled = false;
+    startBtn.textContent = "Start Road Trip";
+
     // Start button
-    document.getElementById("start-btn").addEventListener("click", () => {
+    startBtn.addEventListener("click", () => {
         const source = document.getElementById("source").value.trim();
         const destination = document.getElementById("destination").value.trim();
         const speed = parseFloat(document.getElementById("speed").value);
@@ -70,6 +92,3 @@ function initApp() {
         if (e.key === "Enter") document.getElementById("start-btn").click();
     });
 }
-
-// If YouTube API loads before Maps, wait; if Maps loads first, initApp runs on YT ready.
-// If both loaded, initApp has guards against double-init via module patterns.
