@@ -262,12 +262,23 @@ def populate_cities(csv_text):
     import csv
     import io
 
+    # The real CSV from the gist has preamble lines before the actual header.
+    # Scan for the line starting with "rank," to find the real header.
+    lines = csv_text.splitlines(keepends=True)
+    header_idx = None
+    for i, line in enumerate(lines):
+        if line.strip().startswith("rank,"):
+            header_idx = i
+            break
+    if header_idx is not None:
+        csv_text = "".join(lines[header_idx:])
+
     reader = csv.DictReader(io.StringIO(csv_text))
     count = 0
     with _get_conn() as conn:
         for row in reader:
-            city = row.get("city", "").strip()
-            state = row.get("state", "").strip()
+            city = (row.get("city") or "").strip()
+            state = (row.get("state") or "").strip()
             if not city or not state:
                 continue
             # Convert state full name to abbreviation for matching with city_videos
