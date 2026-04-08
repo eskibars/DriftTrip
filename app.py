@@ -3,6 +3,7 @@ import math
 import os
 from flask import Flask, render_template, request, jsonify, send_from_directory
 import googlemaps
+import requests as http_requests
 import polyline as polyline_codec
 import config
 import db
@@ -391,6 +392,31 @@ def import_videos():
         return jsonify({"error": "city_videos.json not found"}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ── Cities Checklist API ─────────────────────────────────────────────────────
+
+@app.route("/api/cities", methods=["GET"])
+def list_cities():
+    return jsonify(db.get_cities_with_status())
+
+
+@app.route("/api/cities/stats", methods=["GET"])
+def cities_stats():
+    return jsonify(db.get_cities_count())
+
+
+@app.route("/api/cities/populate", methods=["POST"])
+def populate_cities():
+    """Fetch the top-1000 US cities CSV and populate the cities table."""
+    try:
+        resp = http_requests.get(db.CITIES_CSV_URL, timeout=30)
+        resp.raise_for_status()
+    except Exception as e:
+        return jsonify({"error": f"Failed to fetch CSV: {str(e)}"}), 502
+
+    count = db.populate_cities(resp.text)
+    return jsonify({"imported": count})
 
 
 if __name__ == "__main__":

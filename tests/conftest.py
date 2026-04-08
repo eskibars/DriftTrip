@@ -104,3 +104,25 @@ def seed_stations():
     s2 = db.add_station("rock", "97.7 Rock", "97.7", "mp3", "rock.mp3", "Classic rock", 1)
     s3 = db.add_station("jazz", "103.5 Jazz", "103.5", "youtube", "HcEGMi5MPTM", "Smooth jazz", 2)
     return [s1, s2, s3]
+
+
+SAMPLE_CITIES_CSV = """rank,city,state,population,2000-2013 growth
+1,New York,New York,8405837,4.8%
+2,Los Angeles,California,3884307,4.8%
+3,Chicago,Illinois,2718782,-6.1%
+4,Houston,Texas,2195914,11.0%
+5,Columbus,Ohio,822553,11.2%
+"""
+
+
+@pytest.fixture
+def sample_cities_csv():
+    return SAMPLE_CITIES_CSV
+
+
+@pytest.fixture
+def seed_cities():
+    """Populate the cities table with sample CSV data."""
+    import db
+    db.populate_cities(SAMPLE_CITIES_CSV)
+    return db.get_cities_with_status()

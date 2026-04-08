@@ -23,6 +23,16 @@ CREATE TABLE IF NOT EXISTS city_videos (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS cities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rank INTEGER,
+    city TEXT NOT NULL,
+    state TEXT NOT NULL,
+    full_name TEXT UNIQUE NOT NULL,
+    population INTEGER,
+    growth TEXT
+);
+
 CREATE TABLE IF NOT EXISTS radio_stations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     station_id TEXT UNIQUE NOT NULL,
@@ -235,3 +245,92 @@ def import_stations_from_json(json_path="radio_stations.json"):
             except sqlite3.IntegrityError:
                 pass
     return count
+
+
+# ── Cities Checklist ─────────────────────────────────────────────────────────
+
+CITIES_CSV_URL = (
+    "https://gist.githubusercontent.com/Miserlou/11500b2345d3fe850c92/"
+    "raw/e36859a9eef58c231865429ade1c142a2b75f16e/gistfile1.txt"
+)
+
+
+def populate_cities(csv_text):
+    """Parse the top-1000 cities CSV and insert into the cities table.
+    Expects header: rank,city,state,population,2000-2013 growth
+    Returns count of rows inserted."""
+    import csv
+    import io
+
+    reader = csv.DictReader(io.StringIO(csv_text))
+    count = 0
+    with _get_conn() as conn:
+        for row in reader:
+            city = row.get("city", "").strip()
+            state = row.get("state", "").strip()
+            if not city or not state:
+                continue
+            # Convert state full name to abbreviation for matching with city_videos
+            abbr = STATE_ABBREVS.get(state, state)
+            full_name = f"{city}, {abbr}"
+            try:
+                conn.execute(
+                    "INSERT OR IGNORE INTO cities (rank, city, state, full_name, population, growth) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        int(row.get("rank", 0)),
+                        city,
+                        abbr,
+                        full_name,
+                        int(row.get("population", "0").replace(",", "")),
+                        row.get("2000-2013 growth", ""),
+                    ),
+                )
+                count += 1
+            except (sqlite3.IntegrityError, ValueError):
+                pass
+    return count
+
+
+def get_cities_with_status():
+    """Return all cities with a flag indicating whether a video exists.
+    LEFT JOINs cities against city_videos on full_name."""
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT c.id, c.rank, c.city, c.state, c.full_name, c.population, c.growth, "
+            "       CASE WHEN v.id IS NOT NULL THEN 1 ELSE 0 END AS has_video, "
+            "       v.youtube_id, v.title AS video_title "
+            "FROM cities c "
+            "LEFT JOIN city_videos v ON c.full_name = v.full_name "
+            "ORDER BY c.rank"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_cities_count():
+    """Return total cities and how many have videos."""
+    with _get_conn() as conn:
+        total = conn.execute("SELECT COUNT(*) FROM cities").fetchone()[0]
+        with_video = conn.execute(
+            "SELECT COUNT(*) FROM cities c "
+            "INNER JOIN city_videos v ON c.full_name = v.full_name"
+        ).fetchone()[0]
+    return {"total": total, "with_video": with_video}
+
+
+# US state name -> abbreviation mapping for the CSV which uses full names
+STATE_ABBREVS = {
+    "Alabama": "AL", "Alaska": "AK", "Arizona": "AZ", "Arkansas": "AR",
+    "California": "CA", "Colorado": "CO", "Connecticut": "CT", "Delaware": "DE",
+    "Florida": "FL", "Georgia": "GA", "Hawaii": "HI", "Idaho": "ID",
+    "Illinois": "IL", "Indiana": "IN", "Iowa": "IA", "Kansas": "KS",
+    "Kentucky": "KY", "Louisiana": "LA", "Maine": "ME", "Maryland": "MD",
+    "Massachusetts": "MA", "Michigan": "MI", "Minnesota": "MN", "Mississippi": "MS",
+    "Missouri": "MO", "Montana": "MT", "Nebraska": "NE", "Nevada": "NV",
+    "New Hampshire": "NH", "New Jersey": "NJ", "New Mexico": "NM", "New York": "NY",
+    "North Carolina": "NC", "North Dakota": "ND", "Ohio": "OH", "Oklahoma": "OK",
+    "Oregon": "OR", "Pennsylvania": "PA", "Rhode Island": "RI", "South Carolina": "SC",
+    "South Dakota": "SD", "Tennessee": "TN", "Texas": "TX", "Utah": "UT",
+    "Vermont": "VT", "Virginia": "VA", "Washington": "WA", "West Virginia": "WV",
+    "Wisconsin": "WI", "Wyoming": "WY", "District of Columbia": "DC",
+}

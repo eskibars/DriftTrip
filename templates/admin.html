@@ -375,8 +375,9 @@
 
         <!-- Tabs -->
         <div class="tab-bar">
-            <button class="tab-btn active" onclick="switchTab('videos')">City Videos</button>
-            <button class="tab-btn" onclick="switchTab('stations')">&#128251; Radio Stations</button>
+            <button class="tab-btn active" data-tab="videos" onclick="switchTab('videos')">City Videos</button>
+            <button class="tab-btn" data-tab="stations" onclick="switchTab('stations')">&#128251; Radio Stations</button>
+            <button class="tab-btn" data-tab="cities" onclick="switchTab('cities')">&#127961; Cities Checklist</button>
         </div>
 
         <!-- ================================================================ -->
@@ -537,6 +538,62 @@
                 </table>
             </div>
         </div>
+        <!-- ================================================================ -->
+        <!--  CITIES CHECKLIST TAB                                            -->
+        <!-- ================================================================ -->
+        <div class="tab-panel" id="tab-cities">
+            <div class="table-container">
+                <div class="table-toolbar">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <h2>Top 1000 US Cities</h2>
+                        <span class="record-count" id="cit-total-count">0</span>
+                        <span class="record-count" id="cit-video-count" style="background:rgba(46,213,115,0.15); color:var(--success);"></span>
+                    </div>
+                    <button class="btn btn-primary btn-sm" id="cit-populate-btn" onclick="Cities.populate()">Fetch City List</button>
+                </div>
+                <div class="filter-bar">
+                    <div class="filter-group">
+                        <label for="cit-filter-search">&#128269;</label>
+                        <input type="text" id="cit-filter-search" placeholder="Search city or state...">
+                    </div>
+                    <div class="filter-group">
+                        <label for="cit-filter-state">State</label>
+                        <select id="cit-filter-state"><option value="">All States</option></select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="cit-filter-status">Status</label>
+                        <select id="cit-filter-status">
+                            <option value="">All</option>
+                            <option value="has_video">Has Video</option>
+                            <option value="no_video">No Video</option>
+                        </select>
+                    </div>
+                    <button class="filter-clear" id="cit-filter-clear-btn" onclick="Cities.clearFilters()" style="display:none;">Clear filters</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sortable" data-sort="rank" data-tab="cit" onclick="Cities.toggleSort('rank')">Rank <span class="sort-arrow">&#9650;</span></th>
+                            <th class="sortable" data-sort="city" data-tab="cit" onclick="Cities.toggleSort('city')">City <span class="sort-arrow">&#9650;</span></th>
+                            <th class="sortable" data-sort="state" data-tab="cit" onclick="Cities.toggleSort('state')">State <span class="sort-arrow">&#9650;</span></th>
+                            <th class="sortable" data-sort="population" data-tab="cit" onclick="Cities.toggleSort('population')">Population <span class="sort-arrow">&#9650;</span></th>
+                            <th>Video Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cit-tbody"></tbody>
+                </table>
+                <div class="pagination-bar" id="cit-pagination-bar">
+                    <div class="pagination-info">
+                        <span id="cit-page-range-text">0 of 0</span>
+                        <label>Rows: <select id="cit-page-size" onchange="Cities.changePageSize()">
+                            <option value="25">25</option><option value="50" selected>50</option>
+                            <option value="100">100</option><option value="1000">All</option>
+                        </select></label>
+                    </div>
+                    <div class="pagination-nav" id="cit-pagination-nav"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -565,12 +622,14 @@
         }
 
         // ── Tabs ───────────────────────────────────────────────
+        const ALL_TABS = ["videos", "stations", "cities"];
         function switchTab(tab) {
-            document.querySelectorAll(".tab-btn").forEach((b, i) => {
-                b.classList.toggle("active", (tab === "videos" && i === 0) || (tab === "stations" && i === 1));
+            document.querySelectorAll(".tab-btn").forEach(b => {
+                b.classList.toggle("active", b.dataset.tab === tab);
             });
-            document.getElementById("tab-videos").classList.toggle("active", tab === "videos");
-            document.getElementById("tab-stations").classList.toggle("active", tab === "stations");
+            for (const t of ALL_TABS) {
+                document.getElementById("tab-" + t).classList.toggle("active", t === tab);
+            }
         }
 
         // ── Pagination helpers (shared) ────────────────────────
@@ -936,9 +995,175 @@
             return { load, save, startEdit, cancelEdit, confirmDelete, importJson };
         })();
 
+        // ================================================================
+        //  CITIES CHECKLIST MODULE
+        // ================================================================
+        const Cities = (function () {
+            let all = [], filtered = [];
+            let sortCol = "rank", sortDir = "asc";
+            let currentPage = 1, pageSize = 50;
+
+            async function load() {
+                try {
+                    const resp = await fetch("/api/cities");
+                    all = await resp.json();
+                    populateStateFilter();
+                    pipeline();
+                } catch (e) { toast("Failed to load cities", "error"); }
+            }
+
+            async function populate() {
+                const btn = document.getElementById("cit-populate-btn");
+                btn.disabled = true;
+                btn.textContent = "Fetching...";
+                try {
+                    const resp = await fetch("/api/cities/populate", { method: "POST" });
+                    const data = await resp.json();
+                    if (!resp.ok) { toast(data.error || "Populate failed", "error"); return; }
+                    toast(`Loaded ${data.imported} cities`, "success");
+                    load();
+                } catch (e) { toast("Network error", "error"); }
+                finally { btn.disabled = false; btn.textContent = "Fetch City List"; }
+            }
+
+            function pipeline() {
+                filtered = applyFilters(all);
+                filtered = applySort(filtered);
+                const maxPage = Math.max(1, Math.ceil(filtered.length / pageSize));
+                if (currentPage > maxPage) currentPage = maxPage;
+                render();
+                renderPaginationNav(
+                    document.getElementById("cit-pagination-nav"),
+                    document.getElementById("cit-pagination-bar"),
+                    currentPage, filtered.length, pageSize, goToPage
+                );
+                updateCounts();
+            }
+
+            function applyFilters(data) {
+                const search = document.getElementById("cit-filter-search").value.trim().toLowerCase();
+                const state = document.getElementById("cit-filter-state").value;
+                const status = document.getElementById("cit-filter-status").value;
+                let r = data;
+                if (state) r = r.filter(c => c.state === state);
+                if (status === "has_video") r = r.filter(c => c.has_video);
+                else if (status === "no_video") r = r.filter(c => !c.has_video);
+                if (search) r = r.filter(c => [c.city, c.state, c.full_name].filter(Boolean).join(" ").toLowerCase().includes(search));
+                document.getElementById("cit-filter-clear-btn").style.display = (search || state || status) ? "" : "none";
+                return r;
+            }
+
+            function applySort(data) {
+                const dir = sortDir === "asc" ? 1 : -1;
+                return [...data].sort((a, b) => {
+                    let va = a[sortCol], vb = b[sortCol];
+                    if (va == null && vb == null) return 0;
+                    if (va == null) return 1;
+                    if (vb == null) return -1;
+                    if (sortCol === "rank" || sortCol === "population") return (va - vb) * dir;
+                    va = String(va).toLowerCase(); vb = String(vb).toLowerCase();
+                    return va < vb ? -1 * dir : va > vb ? dir : 0;
+                });
+            }
+
+            function clearFilters() {
+                document.getElementById("cit-filter-search").value = "";
+                document.getElementById("cit-filter-state").value = "";
+                document.getElementById("cit-filter-status").value = "";
+                currentPage = 1;
+                pipeline();
+            }
+
+            function populateStateFilter() {
+                const sel = document.getElementById("cit-filter-state");
+                const cur = sel.value;
+                const states = [...new Set(all.map(c => c.state).filter(Boolean))].sort();
+                sel.innerHTML = '<option value="">All States</option>';
+                for (const s of states) { const o = document.createElement("option"); o.value = s; o.textContent = s; sel.appendChild(o); }
+                if (states.includes(cur)) sel.value = cur;
+            }
+
+            function toggleSort(col) {
+                if (sortCol === col) sortDir = sortDir === "asc" ? "desc" : "asc";
+                else { sortCol = col; sortDir = "asc"; }
+                updateSortUI();
+                pipeline();
+            }
+
+            function updateSortUI() {
+                document.querySelectorAll('thead th.sortable[data-tab="cit"]').forEach(th => {
+                    const col = th.dataset.sort;
+                    th.classList.remove("sort-asc", "sort-desc");
+                    const arrow = th.querySelector(".sort-arrow");
+                    if (col === sortCol) {
+                        th.classList.add(sortDir === "asc" ? "sort-asc" : "sort-desc");
+                        arrow.innerHTML = sortDir === "asc" ? "&#9650;" : "&#9660;";
+                    } else { arrow.innerHTML = "&#9650;"; }
+                });
+            }
+
+            function goToPage(p) {
+                const max = Math.max(1, Math.ceil(filtered.length / pageSize));
+                currentPage = Math.max(1, Math.min(p, max));
+                pipeline();
+            }
+
+            function changePageSize() {
+                pageSize = parseInt(document.getElementById("cit-page-size").value, 10);
+                currentPage = 1;
+                pipeline();
+            }
+
+            function updateCounts() {
+                const total = all.length;
+                const withVideo = all.filter(c => c.has_video).length;
+                document.getElementById("cit-total-count").textContent = total + " cities";
+                document.getElementById("cit-video-count").textContent = withVideo + " / " + total + " have videos";
+                const start = filtered.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+                const end = Math.min(currentPage * pageSize, filtered.length);
+                document.getElementById("cit-page-range-text").textContent = `${start}\u2013${end} of ${filtered.length}`;
+            }
+
+            function render() {
+                const tbody = document.getElementById("cit-tbody");
+                const page = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+                if (all.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><p>No cities loaded yet.</p><p>Click "Fetch City List" above to load the top 1000 US cities.</p></td></tr>';
+                    return;
+                }
+                if (filtered.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><p>No cities match your filters.</p></td></tr>';
+                    return;
+                }
+                tbody.innerHTML = page.map(c => {
+                    const pop = c.population ? c.population.toLocaleString() : "\u2014";
+                    const statusHtml = c.has_video
+                        ? `<span class="type-badge mp3" title="${esc(c.video_title || "")}">&#10003; ${esc(c.video_title || "Has video")}</span>`
+                        : `<span style="color:var(--text-dim);">\u2014 No video</span>`;
+                    return `<tr style="${c.has_video ? "" : "opacity:0.7;"}">
+                        <td>${c.rank}</td>
+                        <td>${esc(c.city)}</td>
+                        <td>${esc(c.state)}</td>
+                        <td>${pop}</td>
+                        <td>${statusHtml}</td>
+                    </tr>`;
+                }).join("");
+            }
+
+            // Wire filter inputs
+            document.getElementById("cit-filter-search").addEventListener("input", () => { currentPage = 1; pipeline(); });
+            document.getElementById("cit-filter-state").addEventListener("change", () => { currentPage = 1; pipeline(); });
+            document.getElementById("cit-filter-status").addEventListener("change", () => { currentPage = 1; pipeline(); });
+
+            updateSortUI();
+
+            return { load, populate, clearFilters, toggleSort, changePageSize };
+        })();
+
         // ── Init ────────────────────────────────────────────────
         Videos.load();
         Stations.load();
+        Cities.load();
     </script>
 </body>
 </html>
