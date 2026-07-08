@@ -11,8 +11,8 @@ import db
 app = Flask(__name__)
 
 gmaps = None
-if config.GOOGLE_MAPS_API_KEY:
-    gmaps = googlemaps.Client(key=config.GOOGLE_MAPS_API_KEY)
+if config.GOOGLE_MAPS_SERVER_API_KEY:
+    gmaps = googlemaps.Client(key=config.GOOGLE_MAPS_SERVER_API_KEY)
 
 # Initialize database on startup
 db.init_db()
@@ -142,7 +142,7 @@ def favicon():
 def index():
     return render_template(
         "index.html",
-        google_maps_api_key=config.GOOGLE_MAPS_API_KEY,
+        google_maps_api_key=config.GOOGLE_MAPS_FRONTEND_API_KEY,
         speed_options=config.SPEED_OPTIONS,
     )
 

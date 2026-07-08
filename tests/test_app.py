@@ -17,6 +17,19 @@ class TestPageRoutes:
         resp = app_client.get("/")
         assert resp.status_code == 200
 
+    def test_index_uses_frontend_google_maps_key(self, app_client, monkeypatch):
+        import app as app_module
+
+        monkeypatch.setattr(app_module.config, "GOOGLE_MAPS_FRONTEND_API_KEY", "frontend-key")
+        monkeypatch.setattr(app_module.config, "GOOGLE_MAPS_SERVER_API_KEY", "server-key")
+
+        resp = app_client.get("/")
+        body = resp.get_data(as_text=True)
+        assert resp.status_code == 200
+        assert "key=frontend-key" in body
+        assert 'window.GOOGLE_MAPS_API_KEY = "frontend-key";' in body
+        assert "server-key" not in body
+
     def test_admin_returns_200(self, app_client):
         resp = app_client.get("/admin")
         assert resp.status_code == 200
