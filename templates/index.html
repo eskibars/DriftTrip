@@ -108,18 +108,19 @@
         </div>
     </div>
 
-    <!-- Load YouTube IFrame API -->
-    <script src="https://www.youtube.com/iframe_api"></script>
-    <!-- Load Google Maps -->
+    <!-- Configuration and application modules must load before either API.
+         Both third-party APIs invoke global ready callbacks as soon as they load. -->
     <script>
         window.GOOGLE_MAPS_API_KEY = "{{ google_maps_api_key }}";
         window.SPEED_OPTIONS = {{ speed_options | tojson }};
     </script>
-    <script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=geometry,marker&callback=onGoogleMapsReady&v=weekly" async defer></script>
     <script src="/static/js/map.js"></script>
     <script src="/static/js/radio.js"></script>
     <script src="/static/js/video.js"></script>
     <script src="/static/js/trip.js"></script>
     <script src="/static/js/app.js"></script>
+    <!-- Load external APIs only after their callbacks have been registered. -->
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=geometry,marker&callback=onGoogleMapsReady&v=weekly" async></script>
 </body>
 </html>
