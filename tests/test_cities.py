@@ -119,7 +119,7 @@ class TestCitiesAPI:
         assert data["total"] == 5
         assert data["with_video"] == 1  # Columbus, OH
 
-    def test_populate_success(self, app_client, monkeypatch):
+    def test_populate_success(self, app_client, admin_auth, monkeypatch):
         monkeypatch.setattr(db, "populate_cities", lambda _csv: 1000)
         # Mock the HTTP request
         import app as app_module
@@ -127,12 +127,13 @@ class TestCitiesAPI:
             text = "fake"
             def raise_for_status(self): pass
         monkeypatch.setattr(app_module.http_requests, "get", lambda *a, **kw: FakeResp())
-        resp = app_client.post("/api/cities/populate")
+        resp = app_client.post("/api/cities/populate", headers=admin_auth)
         assert resp.status_code == 200
         assert resp.get_json()["imported"] == 1000
 
-    def test_populate_network_error(self, app_client, monkeypatch):
+    def test_populate_network_error(self, app_client, admin_auth, monkeypatch):
         import app as app_module
         monkeypatch.setattr(app_module.http_requests, "get", lambda *a, **kw: (_ for _ in ()).throw(Exception("timeout")))
-        resp = app_client.post("/api/cities/populate")
+        resp = app_client.post("/api/cities/populate", headers=admin_auth)
         assert resp.status_code == 502
+        assert "timeout" not in resp.get_json()["error"].lower()

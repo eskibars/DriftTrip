@@ -598,11 +598,16 @@
 
     <script>
         // ── Shared utilities ───────────────────────────────────
+        // HTML-escapes text for interpolation into template literals,
+        // including quotes so values cannot break out of attribute contexts.
         function esc(s) {
-            if (!s) return "";
-            const d = document.createElement("div");
-            d.textContent = s;
-            return d.innerHTML;
+            if (s == null) return "";
+            return String(s)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#39;");
         }
 
         function toast(message, type = "success") {
@@ -804,8 +809,8 @@
                         <td>${esc(v.title || "")}</td>
                         <td>${v.duration_seconds != null ? formatDuration(v.duration_seconds) : "\u2014"}</td>
                         <td><div class="actions-cell">
-                            <button class="btn btn-secondary btn-sm" onclick="Videos.startEdit(${v.id})">Edit</button>
-                            <button class="btn btn-danger btn-sm" onclick="Videos.confirmDelete(${v.id}, '${esc(v.full_name)}')">Delete</button>
+                            <button class="btn btn-secondary btn-sm" data-action="edit" data-id="${v.id}">Edit</button>
+                            <button class="btn btn-danger btn-sm" data-action="delete" data-id="${v.id}">Delete</button>
                         </div></td>
                     </tr>`).join("");
             }
@@ -855,7 +860,9 @@
                 document.getElementById("vid-cancel-btn").classList.add("hidden");
             }
 
-            async function confirmDelete(id, name) {
+            async function confirmDelete(id) {
+                const v = all.find(x => x.id === id);
+                const name = v ? (v.full_name || v.city_name) : `video #${id}`;
                 if (!confirm(`Delete video for "${name}"?`)) return;
                 try {
                     const resp = await fetch(`/api/videos/${id}`, { method: "DELETE" });
@@ -878,6 +885,15 @@
             // Wire filter inputs
             document.getElementById("vid-filter-search").addEventListener("input", () => { currentPage = 1; pipeline(); });
             document.getElementById("vid-filter-state").addEventListener("change", () => { currentPage = 1; pipeline(); });
+
+            // Row action buttons (event delegation — no data in inline handlers)
+            document.getElementById("vid-tbody").addEventListener("click", (e) => {
+                const btn = e.target.closest("button[data-action]");
+                if (!btn) return;
+                const id = parseInt(btn.dataset.id, 10);
+                if (btn.dataset.action === "edit") startEdit(id);
+                else if (btn.dataset.action === "delete") confirmDelete(id);
+            });
 
             updateSortUI();
 
@@ -915,8 +931,8 @@
                         <td><code style="font-size:12px;">${esc(s.source)}</code></td>
                         <td>${esc(s.description || "")}</td>
                         <td><div class="actions-cell">
-                            <button class="btn btn-secondary btn-sm" onclick="Stations.startEdit(${s.id})">Edit</button>
-                            <button class="btn btn-danger btn-sm" onclick="Stations.confirmDelete(${s.id}, '${esc(s.name)}')">Delete</button>
+                            <button class="btn btn-secondary btn-sm" data-action="edit" data-id="${s.id}">Edit</button>
+                            <button class="btn btn-danger btn-sm" data-action="delete" data-id="${s.id}">Delete</button>
                         </div></td>
                     </tr>`).join("");
             }
@@ -972,7 +988,9 @@
                 document.getElementById("stn-cancel-btn").classList.add("hidden");
             }
 
-            async function confirmDelete(id, name) {
+            async function confirmDelete(id) {
+                const s = all.find(x => x.id === id);
+                const name = s ? s.name : `station #${id}`;
                 if (!confirm(`Delete station "${name}"?`)) return;
                 try {
                     const resp = await fetch(`/api/stations/${id}`, { method: "DELETE" });
@@ -991,6 +1009,15 @@
                     load();
                 } catch (e) { toast("Network error", "error"); }
             }
+
+            // Wire row action buttons (event delegation — no data in inline handlers)
+            document.getElementById("stn-tbody").addEventListener("click", (e) => {
+                const btn = e.target.closest("button[data-action]");
+                if (!btn) return;
+                const id = parseInt(btn.dataset.id, 10);
+                if (btn.dataset.action === "edit") startEdit(id);
+                else if (btn.dataset.action === "delete") confirmDelete(id);
+            });
 
             return { load, save, startEdit, cancelEdit, confirmDelete, importJson };
         })();

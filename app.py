@@ -1,6 +1,11 @@
-import json
+import hmac
 import math
 import os
+import sqlite3
+import threading
+import time
+from collections import defaultdict, deque
+from werkzeug.exceptions import HTTPException
 from flask import Flask, render_template, request, jsonify, send_from_directory
 import googlemaps
 import requests as http_requests
@@ -10,17 +15,157 @@ import db
 
 app = Flask(__name__)
 
+# Refuse absurdly large request bodies before Werkzeug buffers them.
+app.config["MAX_CONTENT_LENGTH"] = config.MAX_CONTENT_LENGTH
+
 gmaps = None
 if config.GOOGLE_MAPS_SERVER_API_KEY:
-    gmaps = googlemaps.Client(key=config.GOOGLE_MAPS_SERVER_API_KEY)
+    gmaps = googlemaps.Client(key=config.GOOGLE_MAPS_SERVER_API_KEY, timeout=10)
 
 # Initialize database on startup
 db.init_db()
 
 
-def load_json_file(path):
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+# ── Authentication ───────────────────────────────────────────────────────────
+#
+# /admin and every mutating /api endpoint require HTTP Basic auth with the
+# ADMIN_USERNAME / ADMIN_PASSWORD credentials. The two public write endpoints
+# used by the frontend (/api/route, /api/videos/lookup) stay open but are
+# rate limited below. Failed auth attempts are throttled per IP to slow
+# credential brute-forcing.
+#
+# The app fails closed: with no ADMIN_PASSWORD configured, protected
+# endpoints return 503 instead of serving anonymously.
+
+_PUBLIC_API_WRITES = {"/api/route", "/api/videos/lookup"}
+_WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+_rate_lock = threading.Lock()
+_rate_buckets = defaultdict(deque)
+_RATE_WINDOW_SECONDS = 60.0
+_MAX_RATE_BUCKETS = 10_000
+
+
+def _rate_limit_hit(key, limit_per_minute):
+    """Record a hit for key and return True if it is within the limit."""
+    now = time.monotonic()
+    with _rate_lock:
+        bucket = _rate_buckets[key]
+        cutoff = now - _RATE_WINDOW_SECONDS
+        while bucket and bucket[0] <= cutoff:
+            bucket.popleft()
+        if len(_rate_buckets) > _MAX_RATE_BUCKETS:
+            for stale in [k for k, b in _rate_buckets.items() if not b or b[0] <= cutoff]:
+                del _rate_buckets[stale]
+        if limit_per_minute and len(bucket) >= limit_per_minute:
+            return False
+        bucket.append(now)
+        return True
+
+
+def _clear_rate_buckets():
+    """Test helper: reset all rate-limit counters."""
+    with _rate_lock:
+        _rate_buckets.clear()
+
+
+def _check_admin_credentials():
+    auth = request.authorization
+    if auth is None or (auth.type or "").lower() != "basic":
+        return False
+    username = (auth.username or "").encode("utf-8")
+    password = (auth.password or "").encode("utf-8")
+    return hmac.compare_digest(username, config.ADMIN_USERNAME.encode("utf-8")) and \
+        hmac.compare_digest(password, config.ADMIN_PASSWORD.encode("utf-8"))
+
+
+def _unauthorized_response():
+    return jsonify({"error": "Authentication required"}), 401, {
+        "WWW-Authenticate": 'Basic realm="DriftTrip admin", charset="UTF-8"'
+    }
+
+
+@app.before_request
+def enforce_access_control():
+    path = request.path
+    is_public_write = path in _PUBLIC_API_WRITES
+
+    # Throttle the unauthenticated write endpoints the public frontend uses,
+    # so they cannot be abused to burn Google Maps quota or hammer SQLite.
+    if is_public_write:
+        limit = (
+            config.RATE_LIMIT_ROUTE_PER_MINUTE
+            if path == "/api/route"
+            else config.RATE_LIMIT_LOOKUP_PER_MINUTE
+        )
+        bucket_key = f"public:{request.remote_addr}:{path}"
+        if not _rate_limit_hit(bucket_key, limit):
+            return jsonify({"error": "Rate limit exceeded. Try again later."}), 429
+
+    is_admin_area = path == "/admin" or path.startswith("/admin/")
+    needs_auth = is_admin_area or (
+        path.startswith("/api/") and request.method in _WRITE_METHODS and not is_public_write
+    )
+    if not needs_auth:
+        return None
+
+    if not config.ADMIN_PASSWORD:
+        app.logger.error(
+            "Refusing request to %s: admin authentication is not configured "
+            "(set ADMIN_USERNAME and ADMIN_PASSWORD).", path
+        )
+        return jsonify({
+            "error": "Admin authentication is not configured. "
+                     "Set ADMIN_USERNAME and ADMIN_PASSWORD."
+        }), 503
+
+    if _check_admin_credentials():
+        return None
+
+    client_ip = request.remote_addr or "unknown"
+    if not _rate_limit_hit(f"authfail:{client_ip}", config.RATE_LIMIT_AUTH_FAILURES_PER_MINUTE):
+        return jsonify({"error": "Too many failed login attempts. Try again later."}), 429
+    return _unauthorized_response()
+
+
+@app.after_request
+def set_security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    return response
+
+
+@app.errorhandler(Exception)
+def handle_unhandled_exception(e):
+    if isinstance(e, HTTPException):
+        return e
+    app.logger.exception("Unhandled error on %s %s", request.method, request.path)
+    return jsonify({"error": "Internal server error"}), 500
+
+
+# ── Request validation helpers ───────────────────────────────────────────────
+
+def _json_body():
+    """Parse the request body as a JSON object. Returns None for anything else."""
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else None
+
+
+def _clean_str(value, field, max_length, required=False):
+    """Validate an optional string field. Returns (cleaned, error)."""
+    if value is None:
+        if required:
+            return None, f"{field} is required"
+        return None, None
+    if not isinstance(value, str):
+        return None, f"{field} must be a string"
+    cleaned = value.strip()
+    if required and not cleaned:
+        return None, f"{field} is required"
+    if len(cleaned) > max_length:
+        return None, f"{field} must be at most {max_length} characters"
+    return cleaned or None, None
 
 
 def haversine(lat1, lng1, lat2, lng2):
@@ -127,6 +272,40 @@ def attach_videos(cities):
     return cities
 
 
+# ── Route response cache ─────────────────────────────────────────────────────
+#
+# Identical source/destination pairs repeat a lot (users retry, share links,
+# scripts loop). Caching successful responses keeps the billable Google Maps
+# calls at one-per-unique-route instead of one-per-request.
+
+_route_cache = {}
+_route_cache_lock = threading.Lock()
+
+
+def _route_cache_get(key):
+    now = time.monotonic()
+    with _route_cache_lock:
+        entry = _route_cache.get(key)
+        if entry is None:
+            return None
+        expires_at, payload = entry
+        if expires_at <= now:
+            del _route_cache[key]
+            return None
+        return payload
+
+
+def _route_cache_put(key, payload):
+    now = time.monotonic()
+    with _route_cache_lock:
+        if len(_route_cache) >= config.ROUTE_CACHE_MAX_ENTRIES:
+            for stale in [k for k, (exp, _) in _route_cache.items() if exp <= now]:
+                del _route_cache[stale]
+            if len(_route_cache) >= config.ROUTE_CACHE_MAX_ENTRIES:
+                _route_cache.pop(next(iter(_route_cache)))
+        _route_cache[key] = (now + config.ROUTE_CACHE_TTL_SECONDS, payload)
+
+
 # ── Page routes ──────────────────────────────────────────────────────────────
 
 @app.route("/favicon.ico")
@@ -156,20 +335,32 @@ def admin():
 
 @app.route("/api/route", methods=["POST"])
 def get_route():
-    data = request.get_json()
-    source = data.get("source", "").strip()
-    destination = data.get("destination", "").strip()
+    data = _json_body()
+    if data is None:
+        return jsonify({"error": "JSON object body required"}), 400
 
-    if not source or not destination:
-        return jsonify({"error": "Source and destination are required"}), 400
+    source, err = _clean_str(data.get("source"), "source", config.ROUTE_FIELD_LIMIT, required=True)
+    if err:
+        return jsonify({"error": err}), 400
+    destination, err = _clean_str(data.get("destination"), "destination", config.ROUTE_FIELD_LIMIT, required=True)
+    if err:
+        return jsonify({"error": err}), 400
 
     if not gmaps:
         return jsonify({"error": "Google Maps API key not configured"}), 500
 
+    cache_key = (source, destination)
+    cached = _route_cache_get(cache_key)
+    if cached is not None:
+        return jsonify(cached)
+
     try:
         directions = gmaps.directions(source, destination, mode="driving")
-    except Exception as e:
-        return jsonify({"error": f"Directions API error: {str(e)}"}), 500
+    except Exception:
+        # Never echo exception text to clients: transport errors from the
+        # googlemaps client embed the full request URL, including the key.
+        app.logger.exception("Directions API request failed")
+        return jsonify({"error": "Directions request failed"}), 500
 
     if not directions:
         return jsonify({"error": "No route found"}), 404
@@ -202,7 +393,7 @@ def get_route():
     else:
         cities = []
 
-    return jsonify({
+    payload = {
         "overview_polyline": overview_polyline,
         "total_duration_seconds": total_duration,
         "total_distance_meters": total_distance,
@@ -212,7 +403,9 @@ def get_route():
         "start_location": leg["start_location"],
         "end_location": leg["end_location"],
         "cities": cities,
-    })
+    }
+    _route_cache_put(cache_key, payload)
+    return jsonify(payload)
 
 
 @app.route("/api/radio-stations")
@@ -230,16 +423,23 @@ def list_stations():
 
 @app.route("/api/stations", methods=["POST"])
 def create_station():
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "JSON body required"}), 400
+    data = _json_body()
+    if data is None:
+        return jsonify({"error": "JSON object body required"}), 400
 
-    station_id = (data.get("station_id") or "").strip()
-    name = (data.get("name") or "").strip()
-    frequency = (data.get("frequency") or "").strip() or None
-    stype = (data.get("type") or "").strip()
-    source = (data.get("source") or "").strip()
-    description = (data.get("description") or "").strip() or None
+    fields = {}
+    for key in ("station_id", "name", "frequency", "type", "source", "description"):
+        value, err = _clean_str(data.get(key), key, config.FIELD_LENGTH_LIMITS[key])
+        if err:
+            return jsonify({"error": err}), 400
+        fields[key] = value
+
+    station_id = fields["station_id"]
+    name = fields["name"]
+    frequency = fields["frequency"]
+    stype = fields["type"]
+    source = fields["source"]
+    description = fields["description"]
     sort_order = data.get("sort_order", 0)
 
     if not station_id or not name or not stype or not source:
@@ -256,20 +456,26 @@ def create_station():
     try:
         station = db.add_station(station_id, name, frequency, stype, source, description, sort_order)
         return jsonify(station), 201
-    except Exception as e:
-        return jsonify({"error": str(e)}), 409
+    except sqlite3.IntegrityError:
+        return jsonify({"error": "Could not create station: it already exists"}), 409
+    except Exception:
+        app.logger.exception("Failed to create station")
+        return jsonify({"error": "Failed to create station"}), 500
 
 
 @app.route("/api/stations/<int:row_id>", methods=["PUT"])
 def update_station(row_id):
-    data = request.get_json()
+    data = _json_body()
     if not data:
-        return jsonify({"error": "JSON body required"}), 400
+        return jsonify({"error": "JSON object body required"}), 400
 
     fields = {}
     for key in ("station_id", "name", "frequency", "type", "source", "description"):
         if key in data:
-            fields[key] = (data[key] or "").strip() or None
+            value, err = _clean_str(data[key], key, config.FIELD_LENGTH_LIMITS[key])
+            if err:
+                return jsonify({"error": err}), 400
+            fields[key] = value
     if "sort_order" in data:
         try:
             fields["sort_order"] = int(data["sort_order"])
@@ -279,7 +485,10 @@ def update_station(row_id):
     if "type" in fields and fields["type"] not in ("youtube", "mp3", None):
         return jsonify({"error": "type must be 'youtube' or 'mp3'"}), 400
 
-    station = db.update_station(row_id, **fields)
+    try:
+        station = db.update_station(row_id, **fields)
+    except sqlite3.IntegrityError:
+        return jsonify({"error": "Update conflicts with existing station data"}), 409
     if station is None:
         return jsonify({"error": "Station not found"}), 404
     return jsonify(station)
@@ -300,8 +509,9 @@ def import_stations():
         return jsonify({"imported": count})
     except FileNotFoundError:
         return jsonify({"error": "radio_stations.json not found"}), 404
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        app.logger.exception("Station import failed")
+        return jsonify({"error": "Station import failed"}), 500
 
 
 # ── Videos CRUD API ──────────────────────────────────────────────────────────
@@ -310,10 +520,22 @@ def import_stations():
 def lookup_videos():
     """Look up videos for a list of city full_names. Used by the frontend
     to refresh video data for cities along the current route mid-trip."""
-    data = request.get_json()
-    city_names = data.get("cities", []) if data else []
+    data = _json_body()
+    if data is None:
+        return jsonify({"error": "JSON object body required"}), 400
+
+    city_names = data.get("cities", [])
+    if not isinstance(city_names, list) or len(city_names) > config.MAX_LOOKUP_CITIES:
+        return jsonify({"error": f"cities must be a list of at most {config.MAX_LOOKUP_CITIES} names"}), 400
+
     result = {}
     for name in city_names:
+        if not isinstance(name, str) or len(name) > config.ROUTE_FIELD_LIMIT:
+            return jsonify({"error": "each city name must be a string of at most "
+                                     f"{config.ROUTE_FIELD_LIMIT} characters"}), 400
+        name = name.strip()
+        if not name:
+            continue
         video = db.get_video_for_city(name)
         if video:
             result[name] = video
@@ -327,14 +549,21 @@ def list_videos():
 
 @app.route("/api/videos", methods=["POST"])
 def create_video():
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "JSON body required"}), 400
+    data = _json_body()
+    if data is None:
+        return jsonify({"error": "JSON object body required"}), 400
 
-    city_name = (data.get("city_name") or "").strip()
-    state = (data.get("state") or "").strip()
-    youtube_id = (data.get("youtube_id") or "").strip()
-    title = (data.get("title") or "").strip() or None
+    fields = {}
+    for key in ("city_name", "state", "youtube_id", "title"):
+        value, err = _clean_str(data.get(key), key, config.FIELD_LENGTH_LIMITS[key])
+        if err:
+            return jsonify({"error": err}), 400
+        fields[key] = value
+
+    city_name = fields["city_name"]
+    state = fields["state"]
+    youtube_id = fields["youtube_id"]
+    title = fields["title"]
     duration_seconds = data.get("duration_seconds")
 
     if not city_name or not youtube_id:
@@ -349,27 +578,36 @@ def create_video():
     try:
         video = db.add_video(city_name, state, youtube_id, title, duration_seconds)
         return jsonify(video), 201
-    except Exception as e:
-        return jsonify({"error": str(e)}), 409
+    except sqlite3.IntegrityError:
+        return jsonify({"error": "Could not create video: it already exists"}), 409
+    except Exception:
+        app.logger.exception("Failed to create video")
+        return jsonify({"error": "Failed to create video"}), 500
 
 
 @app.route("/api/videos/<int:video_id>", methods=["PUT"])
 def update_video(video_id):
-    data = request.get_json()
+    data = _json_body()
     if not data:
-        return jsonify({"error": "JSON body required"}), 400
+        return jsonify({"error": "JSON object body required"}), 400
 
     fields = {}
     for key in ("city_name", "state", "youtube_id", "title"):
         if key in data:
-            fields[key] = (data[key] or "").strip() or None
+            value, err = _clean_str(data[key], key, config.FIELD_LENGTH_LIMITS[key])
+            if err:
+                return jsonify({"error": err}), 400
+            fields[key] = value
     if "duration_seconds" in data:
         try:
             fields["duration_seconds"] = int(data["duration_seconds"]) if data["duration_seconds"] else None
         except (ValueError, TypeError):
             pass
 
-    video = db.update_video(video_id, **fields)
+    try:
+        video = db.update_video(video_id, **fields)
+    except sqlite3.IntegrityError:
+        return jsonify({"error": "Update conflicts with existing video data"}), 409
     if video is None:
         return jsonify({"error": "Video not found"}), 404
     return jsonify(video)
@@ -390,8 +628,9 @@ def import_videos():
         return jsonify({"imported": count})
     except FileNotFoundError:
         return jsonify({"error": "city_videos.json not found"}), 404
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        app.logger.exception("Video import failed")
+        return jsonify({"error": "Video import failed"}), 500
 
 
 # ── Cities Checklist API ─────────────────────────────────────────────────────
@@ -412,12 +651,21 @@ def populate_cities():
     try:
         resp = http_requests.get(db.CITIES_CSV_URL, timeout=30)
         resp.raise_for_status()
-    except Exception as e:
-        return jsonify({"error": f"Failed to fetch CSV: {str(e)}"}), 502
+    except Exception:
+        app.logger.exception("Failed to fetch cities CSV")
+        return jsonify({"error": "Failed to fetch cities CSV"}), 502
 
     count = db.populate_cities(resp.text)
     return jsonify({"imported": count})
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=12398)
+    # Never run the Werkzeug interactive debugger in production: it exposes
+    # source code and (with the PIN) a live Python console to the network.
+    # Use FLASK_DEBUG=1 only for local development. Bind to localhost by
+    # default; set HOST=0.0.0.0 only behind a reverse proxy or firewall.
+    app.run(
+        host=os.getenv("HOST", "127.0.0.1"),
+        port=int(os.getenv("PORT", "12398")),
+        debug=os.getenv("FLASK_DEBUG", "").lower() in ("1", "true", "yes"),
+    )

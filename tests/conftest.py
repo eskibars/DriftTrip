@@ -2,6 +2,7 @@
 Shared fixtures for all tests.
 """
 
+import base64
 import json
 import os
 import tempfile
@@ -10,6 +11,35 @@ import pytest
 
 # Ensure db.py uses a temp database for every test
 import db as db_module
+
+TEST_ADMIN_USERNAME = "admin"
+TEST_ADMIN_PASSWORD = "test-admin-password"
+
+
+@pytest.fixture(autouse=True)
+def admin_credentials(monkeypatch):
+    """Known admin credentials for every test (the app fails closed without any)."""
+    import config as config_module
+
+    monkeypatch.setattr(config_module, "ADMIN_USERNAME", TEST_ADMIN_USERNAME)
+    monkeypatch.setattr(config_module, "ADMIN_PASSWORD", TEST_ADMIN_PASSWORD)
+
+
+@pytest.fixture
+def admin_auth():
+    """Authorization headers for admin-protected endpoints."""
+    token = base64.b64encode(f"{TEST_ADMIN_USERNAME}:{TEST_ADMIN_PASSWORD}".encode("utf-8")).decode("ascii")
+    return {"Authorization": f"Basic {token}"}
+
+
+@pytest.fixture
+def clean_rate_limiter():
+    """Reset rate-limit counters around tests that exercise them."""
+    import app as app_module
+
+    app_module._clear_rate_buckets()
+    yield
+    app_module._clear_rate_buckets()
 
 
 @pytest.fixture(autouse=True)
